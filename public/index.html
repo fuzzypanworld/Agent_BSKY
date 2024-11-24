@@ -93,20 +93,37 @@
         </div>
     </div>
 
+    <script src="config.js"></script>
+
     <script>
         // Configuration
-       // Replace with your API key
-        const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent';
+        // Will be set after fetching
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent';
 
-        // Helper function to extract post ID from URL
-        function extractPostText(url) {
-            // This is a mock function - you'll need to implement the actual extraction
-            // Example URL: https://bsky.app/profile/username.bsky.social/post/3kgbxxwjy622x
+function extractPostText(url) {
+           
             return {
                 did: url.split('/profile/')[1].split('/post/')[0],
                 postId: url.split('/post/')[1]
             };
+
+    
         }
+        
+
+// Fetch API key when page loads
+async function initializeApiKey() {
+    try {
+        const response = await fetch('/api/key');
+        const data = await response.json();
+        GEMINI_API_KEY = data.key;
+    } catch (error) {
+        console.error('Failed to fetch API key:', error);
+    }
+}
+initializeApiKey();
+        // Helper function to extract post ID from URL
+       
 
         // Function to get post content using Bluesky API
         async function getPostContent(did, postId) {
