@@ -1,4 +1,4 @@
-##Bluesky Style Analyzer
+# Bluesky Style Analyzer
 
 A web application that analyzes Bluesky posts and generates responses in Elon Musk's writing style using the Gemini AI model.
 
