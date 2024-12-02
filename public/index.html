@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bluesky Style Analyzer</title>
+    <title>Bluesky Post Analyzer</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
     <style>
         .gradient-bg {
@@ -37,7 +37,7 @@
         <!-- Header -->
         <header class="text-center mb-12">
             <h1 class="text-4xl font-bold mb-4">Bluesky Post Analyzer</h1>
-            <p class="text-lg opacity-80">See how Elon Musk would say this</p>
+            <p class="text-lg opacity-80">Transform your post into different personas</p>
         </header>
 
         <!-- Main Form -->
@@ -56,6 +56,21 @@
                     >
                 </div>
 
+                <!-- Persona Selection -->
+                <div>
+                    <label class="block text-sm font-medium mb-2">Select Persona</label>
+                    <select 
+                        id="personaSelect" 
+                        class="w-full p-3 rounded-lg bg-white bg-opacity-10 border border-white border-opacity-20 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    >
+                        <option value="elon">Elon Musk</option>
+                        <option value="stevejobs">Steve Jobs</option>
+                        <option value="oprah">Oprah Winfrey</option>
+                        <option value="shakespeare">William Shakespeare</option>
+                        <option value="gordon">Gordon Ramsay</option>
+                    </select>
+                </div>
+
                 <!-- Submit Button -->
                 <button 
                     type="submit"
@@ -69,7 +84,7 @@
         <!-- Loading State -->
         <div id="loadingState" class="loading text-center py-8">
             <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-white border-t-transparent"></div>
-            <p class="mt-4 text-lg">Generating Elon's response...</p>
+            <p id="loadingText" class="mt-4 text-lg">Generating response...</p>
         </div>
 
         <!-- Results Section -->
@@ -82,7 +97,23 @@
 
             <!-- Generated Response -->
             <div class="card p-6 rounded-xl">
-                <h2 class="text-xl font-semibold mb-4">Elon Would Say</h2>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 id="personaResponseTitle" class="text-xl font-semibold">Response</h2>
+                    <div class="space-x-2">
+                        <button 
+                            id="readAloudBtn" 
+                            class="bg-green-500 hover:bg-green-600 px-3 py-1 rounded-lg text-sm"
+                        >
+                            Read Aloud
+                        </button>
+                        <button 
+                            id="regenerateBtn" 
+                            class="bg-blue-500 hover:bg-blue-600 px-3 py-1 rounded-lg text-sm"
+                        >
+                            Regenerate
+                        </button>
+                    </div>
+                </div>
                 <div id="generatedResponse" class="prose prose-invert"></div>
             </div>
         </div>
@@ -95,19 +126,26 @@
 
     <script src="config.js"></script>
     <script>
-        
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent';
 
-function extractPostText(url) {
-           
-            return {
-                did: url.split('/profile/')[1].split('/post/')[0],
-                postId: url.split('/post/')[1]
-            };
+// Persona Prompts
+const PERSONA_PROMPTS = {
+  elon: (postText) => `Rewrite the post: "${postText}" in Elon Musk’s style. Be concise, futuristic, and straightforward. Focus on action and innovation, DO NOT USE FLOWERY LANGUAGE`,
+  stevejobs: (postText) => `Rewrite the post: "${postText}" as Steve Jobs. Keep it sharp, visionary, and product-focused. DO NOT USE FLOWERY LANGUAGE.`,
+  oprah: (postText) => `Rewrite the post: "${postText}" with Oprah’s tone. Uplift and empower. Focus on action and impact. DO NOT USE FLOWERY LANGUAGE`,
+  shakespeare: (postText) => `Rewrite the post: "${postText}" in Shakespeare’s tone. Use metaphor and drama, DO NOT USE FLOWERY LANGUAGE.`,
+  gordon: (postText) => `Rewrite the post: "${postText}" as Gordon Ramsay. Be blunt, passionate, and brutally honest. DO NOT USE FLOWERY LANGUAGE.`
+};
 
-    
-        }
-        
+let currentPostText = '';
+let currentPersona = '';
+
+function extractPostText(url) {
+    return {
+        did: url.split('/profile/')[1].split('/post/')[0],
+        postId: url.split('/post/')[1]
+    };
+}
 
 // Fetch API key when page loads
 async function initializeApiKey() {
@@ -120,92 +158,147 @@ async function initializeApiKey() {
     }
 }
 initializeApiKey();
-        // Helper function to extract post ID from URL
-       
 
-        // Function to get post content using Bluesky API
-        async function getPostContent(did, postId) {
-            const agent = {
-                service: 'https://bsky.social',
-                // Add your Bluesky credentials here
-                identifier: '',
-                password: ''
-            };
+async function getPostContent(did, postId) {
+    const agent = {
+        service: 'https://bsky.social',
+        // Add your Bluesky credentials here
+        identifier: '',
+        password: ''
+    };
 
-            // Get post content using Bluesky API
-            const response = await fetch(`https://bsky.social/xrpc/com.atproto.repo.getRecord?collection=app.bsky.feed.post&repo=${did}&rkey=${postId}`);
-            const data = await response.json();
-            return data.value.text;
+    const response = await fetch(`https://bsky.social/xrpc/com.atproto.repo.getRecord?collection=app.bsky.feed.post&repo=${did}&rkey=${postId}`);
+    const data = await response.json();
+    return data.value.text;
+}
+
+async function generateResponse(postText, persona) {
+    const prompt = PERSONA_PROMPTS[persona](postText);
+    
+    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            contents: [{
+                parts: [{
+                    text: prompt
+                }]
+            }]
+        })
+    });
+
+    const data = await response.json();
+    return data.candidates[0].content.parts[0].text;
+}
+
+async function processAnalysis(postUrl, selectedPersona) {
+    const loadingState = document.getElementById('loadingState');
+    const results = document.getElementById('results');
+    const errorDisplay = document.getElementById('errorDisplay');
+    const loadingText = document.getElementById('loadingText');
+    const personaResponseTitle = document.getElementById('personaResponseTitle');
+    
+    loadingState.style.display = 'block';
+    results.classList.add('hidden');
+    errorDisplay.classList.add('hidden');
+    
+    try {
+        const { did, postId } = extractPostText(postUrl);
+        
+        // Update loading text with selected persona
+        loadingText.textContent = `Generating ${document.getElementById('personaSelect').options[document.getElementById('personaSelect').selectedIndex].text}'s response...`;
+        
+        // Get the original post content
+        const postText = await getPostContent(did, postId);
+        
+        // Store current post text and persona for potential regeneration
+        currentPostText = postText;
+        currentPersona = selectedPersona;
+        
+        // Generate persona's response
+        const personaResponse = await generateResponse(postText, selectedPersona);
+        
+        // Display results
+        document.getElementById('originalPost').textContent = postText;
+        document.getElementById('generatedResponse').textContent = personaResponse;
+        personaResponseTitle.textContent = `${document.getElementById('personaSelect').options[document.getElementById('personaSelect').selectedIndex].text} Would Say`;
+        
+        loadingState.style.display = 'none';
+        results.classList.remove('hidden');
+    } catch (error) {
+        loadingState.style.display = 'none';
+        errorDisplay.classList.remove('hidden');
+        document.getElementById('errorMessage').textContent = 
+            'Error: ' + (error.message || 'Failed to process the request');
+    }
+}
+
+document.getElementById('analyzeForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const postUrl = document.getElementById('postUrl').value;
+    const selectedPersona = document.getElementById('personaSelect').value;
+    await processAnalysis(postUrl, selectedPersona);
+});
+
+// Read Aloud Functionality
+document.getElementById('readAloudBtn').addEventListener('click', () => {
+    const response = document.getElementById('generatedResponse').textContent;
+    
+    // Check if speech synthesis is supported
+    if ('speechSynthesis' in window) {
+        // Create a new speech synthesis utterance
+        const utterance = new SpeechSynthesisUtterance(response);
+        
+        // Optional: Choose a specific voice or language
+        const voices = window.speechSynthesis.getVoices();
+        // You could add logic to select a specific voice that matches the persona
+        
+        // Speak the text
+        window.speechSynthesis.speak(utterance);
+    } else {
+        alert('Text-to-speech is not supported in this browser.');
+    }
+});
+
+// Regenerate Functionality
+document.getElementById('regenerateBtn').addEventListener('click', async () => {
+    if (currentPostText && currentPersona) {
+        const loadingState = document.getElementById('loadingState');
+        const generatedResponse = document.getElementById('generatedResponse');
+        
+        // Show loading state
+        generatedResponse.textContent = '';
+        loadingState.style.display = 'block';
+        
+        try {
+            // Regenerate response
+            const newResponse = await generateResponse(currentPostText, currentPersona);
+            
+            // Update response
+            generatedResponse.textContent = newResponse;
+            
+            // Hide loading state
+            loadingState.style.display = 'none';
+        } catch (error) {
+            loadingState.style.display = 'none';
+            alert('Failed to regenerate response: ' + error.message);
         }
+    } else {
+        alert('No previous analysis to regenerate.');
+    }
+});
 
-        // Function to generate response using Gemini
-        async function generateResponse(postText) {
-            const prompt = `This is the post: "${postText}" How would Elon Musk say this? FOLLOW THE FOLLOWING FOR HIS TONE: Dont go too imaginative. He IS REALLY STARIGHT FORWARD.
-            Don't use words: Realm, dreamy, `;
-            
-            const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{
-                            text: prompt
-                        }]
-                    }]
-                })
-            });
-
-            const data = await response.json();
-            return data.candidates[0].content.parts[0].text;
-        }
-
-        // Form submission handler
-        document.getElementById('analyzeForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const loadingState = document.getElementById('loadingState');
-            const results = document.getElementById('results');
-            const errorDisplay = document.getElementById('errorDisplay');
-            
-            loadingState.style.display = 'block';
-            results.classList.add('hidden');
-            errorDisplay.classList.add('hidden');
-            
-            try {
-                const postUrl = document.getElementById('postUrl').value;
-                const { did, postId } = extractPostText(postUrl);
-                
-                // Get the original post content
-                const postText = await getPostContent(did, postId);
-                
-                // Generate Elon's response
-                const elonResponse = await generateResponse(postText);
-                
-                // Display results
-                document.getElementById('originalPost').textContent = postText;
-                document.getElementById('generatedResponse').textContent = elonResponse;
-                
-                loadingState.style.display = 'none';
-                results.classList.remove('hidden');
-            } catch (error) {
-                loadingState.style.display = 'none';
-                errorDisplay.classList.remove('hidden');
-                document.getElementById('errorMessage').textContent = 
-                    'Error: ' + (error.message || 'Failed to process the request');
-            }
-        });
-
-        // URL validation
-        document.getElementById('postUrl').addEventListener('input', (e) => {
-            const url = e.target.value;
-            if (url && !url.startsWith('https://bsky.app/')) {
-                e.target.setCustomValidity('Please enter a valid Bluesky post URL');
-            } else {
-                e.target.setCustomValidity('');
-            }
-        });
+// URL validation
+document.getElementById('postUrl').addEventListener('input', (e) => {
+    const url = e.target.value;
+    if (url && !url.startsWith('https://bsky.app/')) {
+        e.target.setCustomValidity('Please enter a valid Bluesky post URL');
+    } else {
+        e.target.setCustomValidity('');
+    }
+});
     </script>
 </body>
 </html>
